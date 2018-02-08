@@ -9,8 +9,8 @@ def read_models(base_path="models/"):
 
 models = {x: get_model(x) for x in read_models()}
 
-def predict(sentence):
-    model_name = "neural_token"
+def predict(model_type, sentence):
+    model_name = model_type
     if model_name not in models:
         models[model_name] = get_model(model_name)
     suggestions = neural_complete(models[model_name], sentence, [0.2, 0.5, 1])
@@ -18,4 +18,5 @@ def predict(sentence):
 
 if __name__ == "__main__":
     import sys
-    predict(sys.argv[1])
+    print(sys.argv)
+    predict(sys.argv[1], sys.argv[2])

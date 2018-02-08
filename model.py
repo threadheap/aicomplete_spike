@@ -29,7 +29,7 @@ class LSTMBase(object):
         return np.argmax(probas)
 
     def build_model(self):
-        if os.path.isfile(self.h5_path):
+        if False: # os.path.isfile(self.h5_path):
             model = self.load()
         else:
             # build the model: a single LSTM
@@ -38,14 +38,14 @@ class LSTMBase(object):
             num_unique_a_tokens = len(self.encoder_decoder.ey)
             model = Sequential()
             input_s = (None, num_unique_q_tokens)
-            model.add(LSTM(self.hidden_units, input_shape=input_s))
+            model.add(LSTM(self.hidden_units, input_shape=input_s, dropout=0.4))
             model.add(Dense(num_unique_a_tokens))
             model.add(Activation('softmax'))
             optimizer = RMSprop(lr=0.01)
             model.compile(loss='categorical_crossentropy', optimizer=optimizer)
         return model
 
-    def train(self, test_cases=None, iterations=20, batch_size=256, num_epochs=3, **kwargs):
+    def train(self, test_cases=None, iterations=100, batch_size=256, num_epochs=5, **kwargs):
         if self.model is None:
             self.model = self.build_model()
         if not hasattr(self.encoder_decoder, "X"):
@@ -55,25 +55,26 @@ class LSTMBase(object):
             print()
             print('-' * 50)
             print('Iteration', iteration)
+            print("X", self.encoder_decoder.X.shape)
+            print("y", self.encoder_decoder.y.shape)
             self.model.fit(self.encoder_decoder.X, self.encoder_decoder.y,
                            batch_size=batch_size, nb_epoch=num_epochs,
                            **kwargs)
             self._show_test_cases(test_cases)
 
-    def predict(self, text, diversity, max_prediction_steps, break_at_token=None):
+    def predict(self, sequence, diversity, max_prediction_steps, break_at_token=None):
         if self.model is None:
             self.model = self.build_model()
-        outputs = []
-        for _ in range(max_prediction_steps):
-            X = self.encoder_decoder.encode_question(text)
+        outputs = sequence + []
+        for _ in range(max_prediction_steps - len(outputs)):
+            X = self.encoder_decoder.encode_question(outputs)
             preds = self.model.predict(X, verbose=0)[0]
             answer_token = self.sample(preds, diversity)
             new_text_token = self.encoder_decoder.decode_y(answer_token)
             outputs.append(new_text_token)
-            text += new_text_token
             if break_at_token is not None and break_at_token == new_text_token:
                 break
-        return self.encoder_decoder.untokenize(outputs)
+        return outputs
 
     def save(self):
         if hasattr(self.encoder_decoder, "X"):
@@ -94,4 +95,4 @@ class LSTMBase(object):
             print("\n\n--PREDICTION--\n\n")
             for diversity in [0.2, 0.5, 1]:
                 print("--------- diversity {} ------- ".format(diversity))
-                print(self.predict(test_case, diversity, self.encoder_decoder.maxlen))
+                print(self.predict(test_case, diversity, self.encoder_decoder.maxlen, break_at_token=";"))

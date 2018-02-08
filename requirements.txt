@@ -1,6 +1,5 @@
 numpy
-flask
 keras
 tensorflow
-just
 h5py
+glob

@@ -4,39 +4,13 @@ import numpy as np
 import tokenize as tk
 from io import BytesIO
 
-
-def text_tokenize(txt):
-    """ specific tokenizer suitable for extracting 'python tokens' """
-    toks = []
-    try:
-        for x in tk.tokenize(BytesIO(txt.encode('utf-8')).readline):
-            toks.append(x)
-    except tk.TokenError:
-        pass
-    tokkies = []
-    old = (0, 0)
-    for t in toks:
-        if not t.string:
-            continue
-        if t.start[0] == old[0] and t.start[1] > old[1]:
-            tokkies.append(" " * (t.start[1] - old[1]))
-        tokkies.append(t.string)
-        old = t.end
-    if txt.endswith(" "):
-        tokkies.append(" ")
-    toks = [x for x in tokkies if not x.startswith("#")]
-    return toks[1:]
-
+PADDING = "PADDING"
 
 class EncoderDecoder():
 
-    def __init__(self, maxlen, min_count, unknown, padding, tokenize, untokenize):
-        self.maxlen = maxlen
+    def __init__(self, min_count, unknown):
         self.min_count = min_count
         self.unknown = unknown
-        self.padding = padding
-        self.tokenize = tokenize
-        self.untokenize = untokenize
         self.questions = []
         self.answers = []
         self.ex, self.dx = None, None
@@ -58,6 +32,10 @@ class EncoderDecoder():
     def decode_y(self, y):
         return self.dy.get(y, self.unknown)
 
+    def pad(self, tokens):
+        seqlen = len(tokens)
+        return [PADDING] * (self.maxlen - seqlen + 1) + tokens
+
     def build_coders(self, tokens):
         tokens = [item for sublist in tokens for item in sublist]
         word_to_index = {k: v for k, v in Counter(tokens).items() if v >= self.min_count}
@@ -65,17 +43,19 @@ class EncoderDecoder():
         word_to_index[self.unknown] = 0
         index_to_word = {v: k for k, v in word_to_index.items()}
         index_to_word[0] = self.unknown
+        print("word_to_index", word_to_index)
+        print("index_to_word", index_to_word)
         return word_to_index, index_to_word
 
     def build_qa_coders(self):
-        self.ex, self.dx = self.build_coders(self.questions)
+        self.ex, self.dx = self.build_coders(self.sequences)
         print("unique question tokens:", len(self.ex))
-        self.ey, self.dy = self.build_coders([self.answers])
+        self.ey, self.dy = self.build_coders(self.sequences)
         print("unique answer tokens:", len(self.ey))
 
     def get_xy(self):
         n = len(self.questions)
-        X = np.zeros((n, self.maxlen, len(self.ex)), dtype=np.bool)
+        X = np.zeros((n, self.maxlen + 1, len(self.ex)), dtype=np.bool)
         y = np.zeros((n, len(self.ey)), dtype=np.bool)
         for num_pair, (question, answer) in enumerate(zip(self.questions, self.answers)):
             for num_token, q_token in enumerate(question):
@@ -83,42 +63,34 @@ class EncoderDecoder():
             y[num_pair, self.encode_y(answer)] = 1
         return X, y
 
-    def pad(self, tokens):
-        seqlen = len(tokens)
-        return [self.padding] * (self.maxlen - seqlen + 1) + tokens
-
-    def encode_question(self, text):
+    def encode_question(self, sequence):
         X = np.zeros((1, self.maxlen, len(self.ex)), dtype=np.bool)
-        prepped = self.pad(self.tokenize(text)[-self.maxlen:])
-        for num, x in enumerate(prepped[1:]):
+        for num, x in enumerate(sequence[1:]):
             X[0, num, self.encode_x(x)] = 1
         return X
 
 
 class TextEncoderDecoder(EncoderDecoder):
 
-    def __init__(self, texts, tokenize=str.split, untokenize=" ".join,
-                 window_step=3, maxlen=20, min_count=1,
-                 unknown="UNKNOWN", padding="PADDING"):
-        self.texts = texts
-        self.window_step = window_step
+    def __init__(self, sequences, min_count=1,
+                 unknown="UNKNOWN"):
+        self.sequences = sequences
         c = super(TextEncoderDecoder, self)
-        c.__init__(maxlen, min_count, unknown, padding, tokenize, untokenize)
+        c.__init__(min_count, unknown)
 
     def build_data(self):
         self.questions = []
         self.answers = []
-        for text in self.texts:
-            tokens = self.tokenize(text)
-            text = self.pad(tokens)
-            seqlen = len(text)
-            for i in range(0, seqlen - self.maxlen, self.window_step):
-                self.questions.append(text[i: i + self.maxlen])
-                self.answers.append(text[i + self.maxlen])
+        self.maxlen = max(len(sequence) for sequence in self.sequences)
+        for sequence in self.sequences:
+            seqlen = len(sequence)
+            for i in range(1, seqlen):
+                self.questions.append(self.pad(sequence[ : i]))
+                self.answers.append(sequence[i])
         self.build_qa_coders()
         print("number of QA pairs:", len(self.questions))
         return self.get_xy()
 
-
-class QuestionAnswerEncoderDecoder(EncoderDecoder):
-    pass
+if __name__ == "__main__":
+    encoder = TextEncoderDecoder([['import', 'React', 'from', 'react', ';'], ['import', 'react']])
+    encoder.build_data()
