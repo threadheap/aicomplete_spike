@@ -1,7 +1,7 @@
 import os
 import just
 import numpy as np
-from keras.layers import Activation, Dense, LSTM
+from keras.layers import Activation, Dense, Dropout
 from keras.models import Sequential, load_model
 from keras.optimizers import RMSprop
 
@@ -38,7 +38,8 @@ class LSTMBase(object):
             num_unique_a_tokens = len(self.encoder_decoder.ey)
             model = Sequential()
             input_s = (None, num_unique_q_tokens)
-            model.add(LSTM(self.hidden_units, input_shape=input_s, dropout=0.4))
+            model.add(LSTM(self.hidden_units, input_shape=input_s))
+            model.add(Dropout(0.6))
             model.add(Dense(num_unique_a_tokens))
             model.add(Activation('softmax'))
             optimizer = RMSprop(lr=0.01)
