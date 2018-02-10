@@ -1,1 +1,0 @@
-# https://github.com/codekansas/keras-language-modeling/blob/master/attention_lstm.py
